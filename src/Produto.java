@@ -1,99 +1,96 @@
 import java.text.NumberFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale; // Adicionado baseado no uso de NumberFormat
 
-/** 
- * MIT License
- *
- * Copyright(c) 2025 João Caram <caram@pucminas.br>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
-public class Produto {
+public abstract class Produto implements Comparable<Produto> {
     private static final double MARGEM_PADRAO = 0.2;
-    private String descricao;
-    private double precoCusto;
-    private double margemLucro;
-     
-    
-        
-    /**
-     * Inicializador privado. Os valores default em caso de erro são:
-     * "Produto sem descrição", R$0.01, 1 unidade, 0 unidades 
-     * @param desc Descrição do produto (mínimo 3 caracteres)
-     * @param precoCusto Preço do produto (mínimo 0.01)
-     * @param quant Quantidade atual no estoque (mínimo 0)
-     * @param estoqueMinimo Estoque mínimo (mínimo 0)
-     * @param validade Data de validade passada como parâmetro
-     */
+    private static int ultimoID = 10_000;
+
+    protected int idProduto;
+    protected String descricao;
+    protected double precoCusto;
+    protected double margemLucro;
+
     private void init(String desc, double precoCusto, double margemLucro){
-               
         if(desc.length()<3 ||precoCusto<=0||margemLucro<=0)
             throw new IllegalArgumentException("Valores inválidos para o produto");
         descricao = desc;
         this.precoCusto = precoCusto;
         this.margemLucro = margemLucro;
+        idProduto = ultimoID++;
     }
 
-    /**
-     * Construtor completo. Os valores default em caso de erro são:
-     * "Produto sem descrição", R$0.01, 1 unidade, 0 unidades 
-     * @param desc Descrição do produto (mínimo 3 caracteres)
-     * @param preco Preço do produto (mínimo 0.01)
-     * @param quant Quantidade atual no estoque (mínimo 0)
-     * @param estoqueMinimo Estoque mínimo (mínimo 0)
-     * @param validade Data de validade passada como parâmetro
-     */
-    public Produto(String desc, double precoCusto, double margemLucro){
+    protected Produto(String desc, double precoCusto, double margemLucro){
         init(desc, precoCusto, margemLucro);
     }
 
-    /**
-     * Construtor sem estoque mínimo - fica considerado como 0. 
-     * Os valores default em caso de erro são:
-     * "Produto sem descrição", R$0.01, 1 unidade, 0 unidades 
-     * @param desc Descrição do produto (mínimo 3 caracteres)
-     * @param preco Preço do produto (mínimo 0.01)
-     * @param quant Quantidade atual no estoque (mínimo 0)
-     * @param validade Data de validade passada como parâmetro
-     */
-    public Produto(String desc, double precoCusto){
+    protected Produto(String desc, double precoCusto){
         init(desc, precoCusto, MARGEM_PADRAO);
     }
 
-    /**
-     * Retorna o valor de venda do produto, considerando seu preço de custo e margem de lucro
-     * @return Valor de venda do produto (double, positivo)
-     */
-    public double valorDeVenda(){
-        return precoCusto * (1+margemLucro);
-    }        
-    
+    public abstract double valorDeVenda();
 
-    /**
-     * Descrição em string do produto, contendo sua descrição e o valor de venda.
-     *  @return String com o formato:
-     * [NOME]: R$ [VALOR DE VENDA]
-     */
+    @Override
+    public int hashCode(){
+        return idProduto;
+    }
+
     @Override
     public String toString(){
-        NumberFormat moeda = NumberFormat.getCurrencyInstance();
-        
-        return String.format("NOME: %s: %s", descricao, moeda.format(valorDeVenda()));
+        NumberFormat moeda = NumberFormat.getCurrencyInstance(new Locale("pt", "BR")); // Especifica Locale aqui
+        return String.format("%05d - %s: %s", idProduto, descricao, moeda.format(valorDeVenda())); // Usa 5 dígitos para ID como na versão corrigida
     }
+
+    @Override
+    public int compareTo(Produto outro){
+        // Mantém a comparação original (case-sensitive) do seu código
+        if (outro == null) return 1;
+        return this.descricao.compareTo(outro.descricao);
+    }
+
+    @Override
+    public boolean equals(Object obj){
+        try{
+            Produto outro = (Produto)obj;
+            return this.hashCode() == outro.hashCode();
+        }catch (ClassCastException ex){
+            return false;
+        }
+    }
+
+    static Produto criarDoTexto(String linha) throws IllegalArgumentException, DateTimeParseException { // Adiciona throws
+        Produto novoProduto = null;
+        String[] detalhes = linha.split(";");
+        if (detalhes.length < 4 || detalhes.length > 5) { // Validação básica do número de campos
+            throw new IllegalArgumentException("Formato inválido da linha: " + linha);
+        }
+        try {
+            String tipo = detalhes[0].trim();
+            String descr = detalhes[1].trim();
+            double precoCusto = Double.parseDouble(detalhes[2].trim().replace(",", "."));
+            double margem = Double.parseDouble(detalhes[3].trim().replace(",", "."));
+            if(tipo.equals("1")){
+                 if (detalhes.length != 4) throw new IllegalArgumentException("Formato inválido (esperado 4 campos para tipo 1): " + linha);
+                novoProduto = new ProdutoNaoPerecivel(descr, precoCusto, margem);
+            }
+            else if (tipo.equals("2")){
+                 if (detalhes.length != 5) throw new IllegalArgumentException("Formato inválido (esperado 5 campos para tipo 2): " + linha);
+                LocalDate dataValidade =
+                    LocalDate.parse(detalhes[4].trim(), DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+                novoProduto = new ProdutoPerecivel(descr, precoCusto, margem, dataValidade);
+            } else {
+                 throw new IllegalArgumentException("Tipo de produto inválido '" + tipo + "' na linha: " + linha);
+            }
+        } catch (NumberFormatException e) {
+             throw new IllegalArgumentException("Erro ao converter número na linha: " + linha, e);
+        } catch (DateTimeParseException e) {
+             throw new DateTimeParseException("Erro ao converter data (use dd/MM/yyyy) na linha: " + linha, e.getParsedString(), e.getErrorIndex(), e);
+        } catch (IllegalArgumentException e) { // Captura exceções dos construtores
+             throw new IllegalArgumentException("Erro nos dados do produto: " + e.getMessage() + " Linha: " + linha, e);
+        }
+        return novoProduto;
+    }
+
+    public abstract String gerarDadosTexto();
 }
